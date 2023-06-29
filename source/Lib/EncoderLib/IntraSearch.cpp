@@ -51,6 +51,9 @@
 
 #include <math.h>
 #include <limits>
+
+#define DEBUG_INTRA 0
+
  //! \ingroup EncoderLib
  //! \{
 #define PLTCtx(c) SubCtx( Ctx::Palette, c )
@@ -369,8 +372,10 @@ double IntraSearch::findInterCUCost( CodingUnit &cu )
   return COST_UNKNOWN;
 }
 
+#if DEBUG_INTRA
 std::ofstream file("debug_aip2_mode.txt");
 std::ofstream ref_data("full_ref_data.txt");
+#endif
 
 bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, const double bestCostSoFar, bool mtsCheckRangeFlag, int mtsFirstCheckId, int mtsLastCheckId, bool moreProbMTSIdxFirst, CodingStructure* bestCS)
 {
@@ -559,6 +564,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
 
           if (!LFNSTLoadFlag)
           {
+#if DEBUG_INTRA
             //== print ref data for prediction ==//
             int      ref_length = (pu.Y().width * 2 + 1);
             CPelBuf &srcBuf =
@@ -582,7 +588,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               }
               ref_data << "\n";
             }
-
+#endif
             // end print data //
             
             // first round
@@ -596,7 +602,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               {
                 continue;
               }
-
+              
               bSatdChecked[uiMode] = true;
 
               pu.intraDir[0] = modeIdx;
@@ -606,7 +612,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               // Use the min between SAD and HAD as the cost criterion
               // SAD is scaled by 2 to align with the scaling of HAD
               minSadHad += std::min(distParamSad.distFunc(distParamSad) * 2, distParamHad.distFunc(distParamHad));
-              
+
               // NB xFracModeBitsIntra will not affect the mode for chroma that may have already been pre-estimated.
               m_CABACEstimator->getCtx() = SubCtx( Ctx::MipFlag, ctxStartMipFlag );
               m_CABACEstimator->getCtx() = SubCtx( Ctx::ISPMode, ctxStartIspMode );
@@ -616,14 +622,9 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
 
               uint64_t fracModeBits = xFracModeBitsIntra(pu, uiMode, CHANNEL_TYPE_LUMA);
 
-              //double cost = (double) minSadHad + (double) fracModeBits * sqrtLambdaForFirstPass;
-              double cost = (double) distParamSad.distFunc(distParamSad);
+              double cost = (double) minSadHad + (double) fracModeBits * sqrtLambdaForFirstPass;
+              //double cost = (double) distParamSad.distFunc(distParamSad);
 
-              //file << "mode " << modeIdx << " with Sad = " << distParamSad.distFunc(distParamSad) * 2
-              //     << " and Had = " << distParamHad.distFunc(distParamHad) << "; fracModeBits = " << fracModeBits
-              //     << "; sqrtLambdaForFirstPass = " << sqrtLambdaForFirstPass << "cost = " << cost << "\n";
-              
-              
               DTRACE(g_trace_ctx, D_INTRA_COST, "IntraHAD: %u, %llu, %f (%d)\n", minSadHad, fracModeBits, cost, uiMode);
               //file << modeIdx << ":" << cost << ", ";
 
@@ -646,6 +647,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
             }
 
             // debug best list
+            #if DEBUG_INTRA
             for (int modeIdx = 0; modeIdx < numModesForFullRD; modeIdx++) 
             {
               unsigned parentMode = uiRdModeList[modeIdx].modeId;
@@ -653,7 +655,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               file << parentMode << " ";
             }
             file << "\n";
-
+            #endif
 
           }   // NSSTFlag
           if (!sps.getUseMIP() && LFNSTLoadFlag)
@@ -710,6 +712,8 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
                     uint64_t fracModeBits = xFracModeBitsIntra(pu, mode, CHANNEL_TYPE_LUMA);
 
                     double cost = (double) minSadHad + (double) fracModeBits * sqrtLambdaForFirstPass;
+                    //double cost = (double) distParamSad.distFunc(distParamSad);
+
 
                     updateCandList(ModeInfo(false, false, 0, NOT_INTRA_SUBPARTITIONS, mode), cost, uiRdModeList,
                                    CandCostList, numModesForFullRD);

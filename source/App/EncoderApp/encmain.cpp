@@ -373,6 +373,7 @@ int main(int argc, char* argv[])
 
   dataO.listingSelectedModes();
 
+  dataO.file << "originalCost\n";
   return 0;
 }
 
