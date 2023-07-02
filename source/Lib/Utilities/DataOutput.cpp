@@ -69,7 +69,7 @@ void DataOutput::init() {
 
   file.flush();   // operator "<<" only insert data to stream, not writing it, so we have to flush
 
-  runSecondRound = true;
+  runSecondRound = false;
   printCUInfo    = 0;
 }
 

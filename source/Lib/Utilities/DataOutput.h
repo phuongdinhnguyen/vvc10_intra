@@ -81,6 +81,8 @@ public:
   void listingSelectedModes();
 
   std::string getVidName();
+
+  bool intraDataOut = 0;
 };
 
 /*

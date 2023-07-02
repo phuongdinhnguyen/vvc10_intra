@@ -16,3 +16,4 @@ deploy
 /out/
 /doc/_minted-software-manual/
 /run_video/
+*.zip

@@ -55,23 +55,26 @@
 
 #include "Utilities/DataOutput.h"
 
-#define DEBUG_INTRA_PLANAR 0
-#define DEBUG_INTRA_ANGULAR 0
-#define EXPORT_EN 0
+#define DEBUG_INTRA_PLANAR 1
+#define DEBUG_INTRA_ANGULAR 1
+#define EXPORT_EN 1
+#define PRINT_BLK_DATA 1
 
 #if DEBUG_INTRA_PLANAR
 std::ofstream file3("planar_data_input.txt");
 std::ofstream file4("planar_data_output.txt");
 #endif
 #if DEBUG_INTRA_ANGULAR
-std::ofstream file;
-std::ofstream file2;
+std::ofstream file("angular_data_0.txt");
+std::ofstream file2("angular_data_1.txt");
 //std::ofstream file3("angular_data.txt");
 #endif
 
 #if EXPORT_EN
-std::ofstream data_out("data_all_out.txt");
+std::ofstream data_out("data_all_out.txt", std::ios_base::app);
 #endif
+
+//#include "Utilities/FilenameOut.h"
 
 typedef struct IntraPredBlockData
 {
@@ -103,10 +106,6 @@ typedef struct IntraPredBlockData
     file << blkSize << "\n";
     file << refLength << "\n";
 
-    //file3 << predMode << "\n";
-    //file3 << blkSize << "\n";
-    //file3 << refLength << "\n";
-
     for (int i = 0; i < refLength; i++)
     {
       file << refTop[i] << " ";
@@ -118,20 +117,9 @@ typedef struct IntraPredBlockData
       file << refLeft[i] << " ";
     }
     file << "\n";
-
-    //file3
-    //for (int i = 0; i < refLength; i++)
-    //{
-    //  file3 << refTop[i] << " ";
-    //}
-    //file3 << "\n";
-
-    //for (int i = 0; i < refLength; i++)
-    //{
-    //  file3 << refLeft[i] << " ";
-    //}
-    //file3 << "\n";
   }
+
+
 } IntraPredBlockData;
 IntraPredBlockData blockData;
 
@@ -298,7 +286,7 @@ void IntraPrediction::setReferenceArrayLengths( const CompArea &area )
   m_leftRefLength     = (height << 1);
   m_topRefLength      = (width << 1);
 }
-
+std::ofstream ref_debug("ref_debug.txt");
 void IntraPrediction::predIntraAng( const ComponentID compId, PelBuf &piPred, const PredictionUnit &pu)
 {
   const ComponentID    compID       = MAP_CHROMA( compId );
@@ -313,20 +301,35 @@ void IntraPrediction::predIntraAng( const ComponentID compId, PelBuf &piPred, co
   CHECK( floorLog2(iWidth) > 7, "Size not allowed" );
 
   const int srcStride  = m_refBufferStride[compID]; // stride = blk_size * 2 + 1 = ref_length
+  //if (srcStride == iWidth * 2 + 1) std::cout << srcStride;
+  
   const int srcHStride = 2;
   const CPelBuf & srcBuf = CPelBuf(getPredictorPtr(compID), srcStride, srcHStride); //grab ref data
   const ClpRng& clpRng(pu.cu->cs->slice->clpRng(compID));
 
+  if (compID == COMPONENT_Y && dataO.intraDataOut == 1)
+  {
+    ref_debug << pu.Y().width << " " << compID << " " << m_ipaParam.refFilterFlag << "\n";
+    for (int i = 0; i < srcStride; i++)
+      ref_debug << srcBuf.at(i, 0) << " ";   // print refTop
+    ref_debug << "\n";
+    for (int i = 0; i < srcStride; i++)
+      ref_debug << srcBuf.at(i, 1) << " ";   // print refLeft
+    ref_debug << "\n";
+  }
+
   switch (uiDirMode)
   {
+    case(DC_IDX): xPredIntraDc(srcBuf, piPred, channelType, false); break;
     case(PLANAR_IDX): xPredIntraPlanar(srcBuf, piPred); break;
-    case(DC_IDX):     xPredIntraDc(srcBuf, piPred, channelType, false); break;
     case(BDPCM_IDX):  xPredIntraBDPCM(srcBuf, piPred, isLuma(compID) ? pu.cu->bdpcmMode : pu.cu->bdpcmModeChroma, clpRng); break;
     default:          xPredIntraAng(srcBuf, piPred, channelType, clpRng); break;
   }
 
+  data_out.flush();
   if (m_ipaParam.applyPDPC)
   {
+    std::cout << m_ipaParam.applyPDPC << "\n";
     PelBuf dstBuf = piPred;
     const int scale = ((floorLog2(iWidth) - 2 + floorLog2(iHeight) - 2 + 2) >> 2);
     CHECK(scale < 0 || scale > 31, "PDPC: scale < 0 || scale > 31");
@@ -467,16 +470,33 @@ void IntraPrediction::xPredIntraPlanar( const CPelBuf &pSrc, PelBuf &pDst )
   }
  #endif
 
-
-#if EXPORT_EN // export data
-  pred = pDst.buf;
-  for (int y = 0; y < height; y++, pred += stride)
+  if (EXPORT_EN && dataO.intraDataOut)
   {
-    for (int x = 0; x < width; x++)
-      data_out << pred[x] << " ";
-    data_out << "\n";
+    pred = pDst.buf;
+    data_out << width << " " << 1 << "\n";
+    
+    // for (int k = 0; k < width + 1; k++)
+    // {
+    //   data_out << ori_topRow[k] << " ";
+    // }
+    // data_out << "\n";
+
+    // for (int k = 0; k < height + 1; k++)
+    // {
+    //   data_out << ori_leftColumn[k] << " ";
+    // }
+    // data_out << " here\n";
+
+    if (PRINT_BLK_DATA)
+    for (int y = 0; y < height; y++, pred += stride)
+    {
+      for (int x = 0; x < width; x++)
+        data_out << pred[x] << " ";
+      data_out << "\n";
+    }
+    
+    data_out.flush();
   }
-#endif
 }
 
 void IntraPrediction::xPredIntraDc( const CPelBuf &pSrc, PelBuf &pDst, const ChannelType channelType, const bool enableBoundaryFilter )
@@ -487,9 +507,12 @@ void IntraPrediction::xPredIntraDc( const CPelBuf &pSrc, PelBuf &pDst, const Cha
   // export data
   const uint32_t blksize = pDst.width;
 
-#if EXPORT_EN
+#if EXPORT_EN && 0
   Pel *pred = pDst.buf;
   const uint32_t stride = pDst.stride;
+
+  data_out << blksize << " " << 0 << "\n";
+  if (PRINT_BLK_DATA)
   for (int y = 0; y < blksize; y++, pred += stride)
   {
     for (int x = 0; x < blksize; x++)
@@ -512,6 +535,7 @@ void openFile()
 #endif
 
 // Function for initialization of intra prediction parameters
+int  curPredMode;
 void IntraPrediction::initPredIntraParams(const PredictionUnit & pu, const CompArea area, const SPS& sps)
 {
 #if DEBUG_INTRA_PLANAR
@@ -528,7 +552,7 @@ void IntraPrediction::initPredIntraParams(const PredictionUnit & pu, const CompA
   const Size&  blockSize = useISP ? cuSize : puSize;
   const int      dirMode = PU::getFinalIntraMode(pu, chType);
   const int     predMode = getModifiedWideAngle( blockSize.width, blockSize.height, dirMode );
-
+  //curPredMode              = PredMode;
   blockData.predMode = predMode; // intra mode, from 0 to 67
 
   m_ipaParam.isModeVer            = predMode >= DIA_IDX;
@@ -868,13 +892,18 @@ void IntraPrediction::xPredIntraAng( const CPelBuf &pSrc, PelBuf &pDst, const Ch
 #endif
     
 #if EXPORT_EN
-    data_out << blockData.blkSize << "\n";
-    for (int x = 0; x < width; x++)
+    if (EXPORT_EN && dataO.intraDataOut) 
     {
-      for (int y = 0; y < height; y++)
-        data_out << pDst.at(x, y) << " ";
+      data_out << blockData.blkSize << " " << blockData.predMode << "\n";
+      // blockData.printData(data_out);
+      if (PRINT_BLK_DATA)
+      for (int x = 0; x < width; x++)
+      {
+        for (int y = 0; y < height; y++)
+          data_out << pDst.at(x, y) << " ";
 
-      data_out << "\n";
+        data_out << "\n";
+      }
     }
 #endif
   }
@@ -984,6 +1013,7 @@ void IntraPrediction::geneIntrainterPred(const CodingUnit &cu)
 
   initIntraPatternChType(cu, pu->Y());
   predIntraAng(COMPONENT_Y, cu.cs->getPredBuf(*pu).Y(), *pu);
+
   int maxCompID = 1;
   if (isChromaEnabled(pu->chromaFormat))
   {
