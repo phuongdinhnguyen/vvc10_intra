@@ -346,7 +346,8 @@ void RdCost::setDistParam( DistParam &rcDP, const CPelBuf &org, const CPelBuf &c
   rcDP.compID       = compID;
 
   const int DFOffset = ( rcDP.useMR ? DF_MRSAD - DF_SAD : 0 );
-
+  // if (DFOffset != 0)
+  // std::cout << DFOffset << "\n";
   if( !useHadamard )
   {
     if( org.width == 12 )
@@ -363,7 +364,9 @@ void RdCost::setDistParam( DistParam &rcDP, const CPelBuf &org, const CPelBuf &c
     }
     else if( isPowerOf2( org.width) )
     {
+      // std::cout << "this is being used\n";
       rcDP.distFunc = m_afpDistortFunc[ DF_SAD + DFOffset + floorLog2( org.width ) ];
+      // if block size = 16 -> 8 + 0 + log2(16) = 8 + 0 + 4 = 12
     }
     else
     {

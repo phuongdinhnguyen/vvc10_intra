@@ -41,6 +41,8 @@
 #include "../Rom.h"
 #include "../RdCost.h"
 
+#include "Utilities/DataOutput.h"
+
 #ifdef TARGET_SIMD_X86
 
 typedef Pel Torg;
@@ -354,6 +356,26 @@ Distortion RdCost::xGetSAD_NxN_SIMD( const DistParam &rcDtParam )
   const int iStrideSrc2 = rcDtParam.cur.stride * iSubStep;
 
   uint32_t uiSum = 0;
+
+  // DEBUG
+  
+  // std::ofstream sad_debug("sad_debug.txt", std::ios_base::app);
+  // const short* ori   = (const short*)rcDtParam.cur.buf;
+  // if (dataO.intraDataOut)
+  // {
+  //   sad_debug << dataO.curIntraMode << "\n";
+  //   for (int y = 0; y < iRows; y++, ori += iStrideSrc2)
+  //   {
+  //     for (int x = 0; x < iRows; x++)
+  //     {
+  //       sad_debug << ori[x] << " ";
+  //     }
+  //     sad_debug << "\n";
+  //   }
+  //   sad_debug.flush();
+  // }
+  // END OF DEBUG
+
 
   if( iWidth == 4 )
   {

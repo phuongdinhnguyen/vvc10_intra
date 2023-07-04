@@ -567,32 +567,42 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
 
           if (!LFNSTLoadFlag)
           {
+            if (pu.Y().width == 16)
+                dataO.intraDataOut = 1;
+              else 
+                dataO.intraDataOut = 0;
+
 #if PRINT_REF_DATA
-            //== print ref data for prediction ==//
             int      ref_length = (pu.Y().width * 2 + 1);
             CPelBuf &srcBuf =
               CPelBuf(getPredictorPtrUnfilt(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
               // use filtered sample or not, decided by m_ipaParam.refFilterFlag
-            
-            ref_data << pu.Y().width << "\n";
-            for (int i = 0; i < ref_length; i++)
-              ref_data << srcBuf.at(i, 0) << " ";   // print refTop
-            ref_data << "\n";
-            for (int i = 0; i < ref_length; i++)
-              ref_data << srcBuf.at(i, 1) << " ";   // print refLeft
-            ref_data << "\n";
 
-            //=== print original block pixels ====//
             Pel *          ori    = piOrg.buf;
             const uint32_t stride = piOrg.stride;
-            for (int y = 0; y < height; y++, ori += stride)
+            //== print ref data for prediction ==//
+            if (dataO.intraDataOut)
             {
-              for (int x = 0; x < width; x++)
-              {
-                ref_data << ori[x] << " ";
-              }
+              ref_data << pu.Y().width << "\n";
+              for (int i = 0; i < ref_length; i++)
+                ref_data << srcBuf.at(i, 0) << " ";   // print refTop
               ref_data << "\n";
+              for (int i = 0; i < ref_length; i++)
+                ref_data << srcBuf.at(i, 1) << " ";   // print refLeft
+              ref_data << "\n";
+
+              //=== print original block pixels ====//
+              
+              for (int y = 0; y < height; y++, ori += stride)
+              {
+                for (int x = 0; x < width; x++)
+                {
+                  ref_data << ori[x] << " ";
+                }
+                ref_data << "\n";
+              }
             }
+            
 #endif
             // end print data //
 
@@ -601,34 +611,37 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
             // int      ref_length = (pu.Y().width * 2 + 1);
             // CPelBuf &srcBuf =
             //   CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
-            data_out2 << pu.Y().width << "\n";
-            for (int i = 0; i < ref_length; i++)
-              data_out2 << srcBuf.at(i, 0) << " ";   // print refTop
-            data_out2 << "\n";
-            for (int i = 0; i < ref_length; i++)
-              data_out2 << srcBuf.at(i, 1) << " ";   // print refLeft
-            data_out2 << "\n";
-            data_out2.flush();
-            //=== print original block pixels ====//
-            // Pel *          ori    = piOrg.buf;
-            // const uint32_t stride = piOrg.stride;
-            // for (int y = 0; y < height; y++, ori += stride)
-            // {
-            //   for (int x = 0; x < width; x++)
-            //   {
-            //     data_out2 << ori[x] << " ";
-            //   }
-            //   data_out2 << "\n";
-            // }
-            // data_out2.flush();
+            if (dataO.intraDataOut)
+            {
+              data_out2 << pu.Y().width << "\n";
+              for (int i = 0; i < ref_length; i++)
+                data_out2 << srcBuf.at(i, 0) << " ";   // print refTop
+              data_out2 << "\n";
+              for (int i = 0; i < ref_length; i++)
+                data_out2 << srcBuf.at(i, 1) << " ";   // print refLeft
+              data_out2 << "\n";
+              data_out2.flush();
+              //=== print original block pixels ====//
+              ori    = piOrg.buf;
+              // const uint32_t stride = piOrg.stride;
+              for (int y = 0; y < height; y++, ori += stride)
+              {
+                for (int x = 0; x < width; x++)
+                {
+                  data_out2 << ori[x] << " ";
+                }
+                data_out2 << "\n";
+              }
+              data_out2.flush();
+            }
 #endif
-            std::vector <int> costMode;
+            std::vector <int> costMode(70);
             // first round
             for (int modeIdx = 0; modeIdx < numModesAvailable; modeIdx++) 
             {
               uint32_t   uiMode    = modeIdx;
               Distortion minSadHad = 0;
-              dataO.intraDataOut = 1;
+              
               // Skip checking extended Angular modes in the first round of SATD
               if (uiMode > DC_IDX && (uiMode & 1))
               {
@@ -660,11 +673,34 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               //   ref_data << srcBuf.at(i, 1) << " ";   // print refLeft
               // ref_data << "---\n";
 
+              // if (dataO.intraDataOut)
+              // {
+              //   std::ofstream  file4("sad_debug.txt", std::ios_base::app);
+              //   Pel           *pred   = piPred.buf;
+              //   const uint32_t stride = piPred.stride;
+              //   file4 << "----" << modeIdx << " \n";
+              //   for (int y = 0; y < height; y++, pred += stride)
+              //   {
+              //     for (int x = 0; x < width; x++)
+              //       file4 << pred[x] << " ";
+              //     file4 << "\n";
+              //   }
+              //   file4.flush();
+              // }
+
               predIntraAng(COMPONENT_Y, piPred, pu);
+
+              
 
               // Use the min between SAD and HAD as the cost criterion
               // SAD is scaled by 2 to align with the scaling of HAD
               minSadHad += std::min(distParamSad.distFunc(distParamSad) * 2, distParamHad.distFunc(distParamHad));
+
+              // cost SAD calculation: in file rdCostX86.h; 
+              // function name: Distortion RdCost::xGetSAD_NxN_SIMD( const DistParam &rcDtParam )
+
+              
+
 
               // NB xFracModeBitsIntra will not affect the mode for chroma that may have already been pre-estimated.
               m_CABACEstimator->getCtx() = SubCtx( Ctx::MipFlag, ctxStartMipFlag );
@@ -677,17 +713,42 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
 
               //double cost = (double) minSadHad + (double) fracModeBits * sqrtLambdaForFirstPass;
               double cost = (double) distParamSad.distFunc(distParamSad);
-              costMode.push_back((int)cost);
+              costMode[modeIdx] = (int)cost;
               DTRACE(g_trace_ctx, D_INTRA_COST, "IntraHAD: %u, %llu, %f (%d)\n", minSadHad, fracModeBits, cost, uiMode);
-              file_cost << modeIdx << ":" << cost << ", ";
+              if (dataO.intraDataOut)
+                file_cost << modeIdx << ":" << cost << ", ";
 
               updateCandList(ModeInfo(false, false, 0, NOT_INTRA_SUBPARTITIONS, uiMode), cost, uiRdModeList,
                              CandCostList, numModesForFullRD);
               updateCandList(ModeInfo(false, false, 0, NOT_INTRA_SUBPARTITIONS, uiMode), double(minSadHad),
                              uiHadModeList, CandHadList, numHadCand);
             }
-            dataO.intraDataOut = 0;
+            if (dataO.intraDataOut)
             file_cost << "\n";
+
+            // debug best list
+            #if DEBUG_INTRA_COST
+            if (dataO.intraDataOut)
+            {
+              for (int modeIdx = 0; modeIdx < numModesForFullRD; modeIdx++) 
+              {
+                unsigned parentMode = uiRdModeList[modeIdx].modeId;
+                
+                file_cost << parentMode << " ";
+              }
+              file_cost << "\n";
+              file_cost << "cost: ";
+              for (int modeIdx = 0; modeIdx < numModesForFullRD; modeIdx++)
+              {
+                unsigned parentMode = uiRdModeList[modeIdx].modeId;
+
+                file_cost << costMode[parentMode] << " ";
+              }
+              file_cost << "\n";
+            }
+            #endif
+            dataO.intraDataOut = 0;
+
             if (!sps.getUseMIP() && LFNSTSaveFlag)
             {
               // save found best modes
@@ -699,25 +760,6 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               m_dSavedHadListLFNST      = CandHadList;
               LFNSTSaveFlag             = false;
             }
-
-            // debug best list
-            #if DEBUG_INTRA_COST
-            for (int modeIdx = 0; modeIdx < numModesForFullRD; modeIdx++) 
-            {
-              unsigned parentMode = uiRdModeList[modeIdx].modeId;
-              
-              file_cost << parentMode << " ";
-            }
-            file_cost << "\n";
-            file_cost << "cost: ";
-            for (int modeIdx = 0; modeIdx < numModesForFullRD; modeIdx++)
-            {
-              unsigned parentMode = uiRdModeList[modeIdx].modeId;
-
-              file_cost << costMode[parentMode] << " ";
-            }
-            file_cost << "\n";
-            #endif
 
           }   // NSSTFlag
           if (!sps.getUseMIP() && LFNSTLoadFlag)

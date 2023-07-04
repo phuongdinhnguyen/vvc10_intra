@@ -329,6 +329,22 @@ void IntraPrediction::predIntraAng( const ComponentID compId, PelBuf &piPred, co
     default:          xPredIntraAng(srcBuf, piPred, channelType, clpRng); break;
   }
 
+  if (EXPORT_EN && dataO.intraDataOut)
+  {
+    Pel *pred = piPred.buf;
+    const uint32_t stride = piPred.stride;
+    const uint32_t blksize = piPred.width;
+    data_out << blksize << " " <<  uiDirMode << "\n";
+    if (PRINT_BLK_DATA)
+    for (int y = 0; y < blksize; y++, pred += stride)
+    {
+      for (int x = 0; x < blksize; x++)
+        data_out << pred[x] << " ";
+      data_out << "\n";
+    }
+    data_out.flush();
+  }
+
   // data_out.flush();
   if (m_ipaParam.applyPDPC)
   {
@@ -473,33 +489,33 @@ void IntraPrediction::xPredIntraPlanar( const CPelBuf &pSrc, PelBuf &pDst )
   }
  #endif
 
-  if (EXPORT_EN && dataO.intraDataOut)
-  {
-    pred = pDst.buf;
-    data_out << width << " " << 0 << "\n";
+  // if (EXPORT_EN && dataO.intraDataOut)
+  // {
+  //   pred = pDst.buf;
+  //   data_out << width << " " << 0 << "\n";
     
-    // for (int k = 0; k < width + 1; k++)
-    // {
-    //   data_out << ori_topRow[k] << " ";
-    // }
-    // data_out << "\n";
+  //   // for (int k = 0; k < width + 1; k++)
+  //   // {
+  //   //   data_out << ori_topRow[k] << " ";
+  //   // }
+  //   // data_out << "\n";
 
-    // for (int k = 0; k < height + 1; k++)
-    // {
-    //   data_out << ori_leftColumn[k] << " ";
-    // }
-    // data_out << " here\n";
+  //   // for (int k = 0; k < height + 1; k++)
+  //   // {
+  //   //   data_out << ori_leftColumn[k] << " ";
+  //   // }
+  //   // data_out << " here\n";
 
-    if (PRINT_BLK_DATA)
-    for (int y = 0; y < height; y++, pred += stride)
-    {
-      for (int x = 0; x < width; x++)
-        data_out << pred[x] << " ";
-      data_out << "\n";
-    }
+  //   if (PRINT_BLK_DATA)
+  //   for (int y = 0; y < height; y++, pred += stride)
+  //   {
+  //     for (int x = 0; x < width; x++)
+  //       data_out << pred[x] << " ";
+  //     data_out << "\n";
+  //   }
     
-    data_out.flush();
-  }
+  //   data_out.flush();
+  // }
 }
 
 void IntraPrediction::xPredIntraDc( const CPelBuf &pSrc, PelBuf &pDst, const ChannelType channelType, const bool enableBoundaryFilter )
@@ -510,25 +526,25 @@ void IntraPrediction::xPredIntraDc( const CPelBuf &pSrc, PelBuf &pDst, const Cha
   // export data
   const uint32_t blksize = pDst.width;
 
-#if EXPORT_EN 
-  if (EXPORT_EN && dataO.intraDataOut)
-  {
-    Pel *pred = pDst.buf;
-    const uint32_t stride = pDst.stride;
+// #if EXPORT_EN 
+//   if (EXPORT_EN && dataO.intraDataOut)
+//   {
+//     Pel *pred = pDst.buf;
+//     const uint32_t stride = pDst.stride;
 
-    data_out << blksize << " " << 1 << "\n";
-    if (PRINT_BLK_DATA)
-    for (int y = 0; y < blksize; y++, pred += stride)
-    {
-      for (int x = 0; x < blksize; x++)
-        data_out << pred[x] << " ";
-      data_out << "\n";
-    }
-    data_out.flush();
-  }
+//     data_out << blksize << " " << 1 << "\n";
+//     if (PRINT_BLK_DATA)
+//     for (int y = 0; y < blksize; y++, pred += stride)
+//     {
+//       for (int x = 0; x < blksize; x++)
+//         data_out << pred[x] << " ";
+//       data_out << "\n";
+//     }
+//     data_out.flush();
+//   }
   
 
-#endif
+// #endif
 }
 
 // Debug: Call and update file output name once -> use std::call_once function
@@ -815,14 +831,7 @@ void IntraPrediction::xPredIntraAng( const CPelBuf &pSrc, PelBuf &pDst, const Ch
     for (int k = -sizeSide; k <= -1; k++)
     {
       refMain[k] = refSide[std::min((-k * absInvAngle + 256) >> 9, sizeSide)];
-      //file3 << k << ">" << absInvAngle << "> " << ((-k * absInvAngle + 256) >> 9) << ">>" << refMain[k] << "; ";
     }
-    //file3 << "\n";
-
-    // Debug: print reference after extended
-    //for (int x = -width; x <= m_topRefLength + 3; x++)
-    //  file3 << refMain[x] << " ";
-    //file3 << "\n";
   }
   else
   {
@@ -838,28 +847,11 @@ void IntraPrediction::xPredIntraAng( const CPelBuf &pSrc, PelBuf &pDst, const Ch
       refLeft[y] = pSrc.at(y, 1);
     }
 
-    //for (int x = 0; x <= m_topRefLength + multiRefIdx; x++)
-    //{
-    //  file3 << refAbove[x] << " ";
-    //}
-
-    //for (int y = 0; y <= m_leftRefLength + multiRefIdx; y++)
-    //{
-    //  file3 << refLeft[y] << " ";
-    //}
-
     blockData.grabDataTop(refAbove, 0);
     blockData.grabDataLeft(refLeft, 0);
 
     refMain = bIsModeVer ? refAbove : refLeft;
     refSide = bIsModeVer ? refLeft : refAbove;
-
-    // Debug: print reference after extended
-    //file3 << "---" << m_topRefLength + multiRefIdx << "---";
-    //for (int x = -width; x <= m_topRefLength + 3; x++)
-    //  file3 << refMain[x] << " ";
-    //file3 << "\n";
-
 
     // Extend main reference to right using replication
     const int log2Ratio = floorLog2(width) - floorLog2(height);
@@ -871,9 +863,7 @@ void IntraPrediction::xPredIntraAng( const CPelBuf &pSrc, PelBuf &pDst, const Ch
     for (int z = 1; z <= maxIndex; z++)
     {
       refMain[refLength + multiRefIdx + z] = val;
-      //file3 << "|" << refMain[refLength + multiRefIdx + z] << " ";
     }
-    //file3 << "\n";
   }
 
   // swap width/height if we are doing a horizontal mode:
@@ -974,7 +964,7 @@ void IntraPrediction::xPredIntraAng( const CPelBuf &pSrc, PelBuf &pDst, const Ch
       }
       if (m_ipaParam.applyPDPC)
       {
-        //file << "applyPDPC\n";
+        std::cout << "applyPDPC\n";
         const int scale       = m_ipaParam.angularScale;
         int       invAngleSum = 256;
 
@@ -1004,37 +994,37 @@ void IntraPrediction::xPredIntraAng( const CPelBuf &pSrc, PelBuf &pDst, const Ch
     }
   }
 
-  if (1 && (channelType == CHANNEL_TYPE_LUMA)) 
-  {
-#if DEBUG_INTRA_ANGULAR
-    blockData.printData(file);
-    file2 << blockData.blkSize << " " << blockData.predMode << "\n";
-    for (int x = 0; x < width; x++)
-    {
-      for (int y = 0; y < height; y++)
-        file2 << pDst.at(x, y) << " ";
+//   if (1 && (channelType == CHANNEL_TYPE_LUMA)) 
+//   {
+// #if DEBUG_INTRA_ANGULAR
+//     blockData.printData(file);
+//     file2 << blockData.blkSize << " " << blockData.predMode << "\n";
+//     for (int x = 0; x < width; x++)
+//     {
+//       for (int y = 0; y < height; y++)
+//         file2 << pDst.at(x, y) << " ";
 
-      file2 << "\n";
-    }
-#endif
+//       file2 << "\n";
+//     }
+// #endif
     
-#if EXPORT_EN
-    if (EXPORT_EN && dataO.intraDataOut) 
-    {
-      data_out << blockData.blkSize << " " << blockData.predMode << "\n";
-      // blockData.printData(data_out);
-      if (PRINT_BLK_DATA)
-      for (int x = 0; x < width; x++)
-      {
-        for (int y = 0; y < height; y++)
-          data_out << pDst.at(x, y) << " ";
+// #if EXPORT_EN
+//     if (EXPORT_EN && dataO.intraDataOut) 
+//     {
+//       data_out << blockData.blkSize << " " << blockData.predMode << "\n";
+//       // blockData.printData(data_out);
+//       if (PRINT_BLK_DATA)
+//       for (int x = 0; x < width; x++)
+//       {
+//         for (int y = 0; y < height; y++)
+//           data_out << pDst.at(x, y) << " ";
 
-        data_out << "\n";
-      }
-      data_out.flush();
-    }
-#endif
-  }
+//         data_out << "\n";
+//       }
+//       data_out.flush();
+//     }
+// #endif
+//   }
 
 }
 
