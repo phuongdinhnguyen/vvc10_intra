@@ -123,6 +123,7 @@ protected:
   void xPredIntraAng              ( const CPelBuf &pSrc, PelBuf &pDst, const ChannelType channelType, const ClpRng& clpRng);
 
   void initPredIntraParams        ( const PredictionUnit & pu,  const CompArea compArea, const SPS& sps );
+  void initPredIntraParams        ( const PredictionUnit & pu,  const CompArea compArea, const SPS& sps , CPelBuf &srcBuf);
 
   static bool isIntegerSlope(const int absAng) { return (0 == (absAng & 0x1F)); }
 
@@ -151,6 +152,11 @@ public:
   Pel *getPredictorPtr(const ComponentID compId)
   {
     return m_refBuffer[compId][m_ipaParam.refFilterFlag ? PRED_BUF_FILTERED : PRED_BUF_UNFILTERED];
+  }
+
+  Pel *getPredictorPtrUnfilt(const ComponentID compId)
+  {
+    return m_refBuffer[compId][PRED_BUF_UNFILTERED];
   }
 
   // Cross-component Chroma

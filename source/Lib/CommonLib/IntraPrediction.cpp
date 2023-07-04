@@ -74,6 +74,7 @@ std::ofstream file2("angular_data_1.txt");
 std::ofstream data_out("data_all_out.txt", std::ios_base::app);
 #endif
 
+std::ofstream ref_debug_intra("ref_debug_intra.txt");
 //#include "Utilities/FilenameOut.h"
 
 typedef struct IntraPredBlockData
@@ -304,12 +305,14 @@ void IntraPrediction::predIntraAng( const ComponentID compId, PelBuf &piPred, co
   //if (srcStride == iWidth * 2 + 1) std::cout << srcStride;
   
   const int srcHStride = 2;
+  // m_ipaParam.refFilterFlag = 0;
   const CPelBuf & srcBuf = CPelBuf(getPredictorPtr(compID), srcStride, srcHStride); //grab ref data
   const ClpRng& clpRng(pu.cu->cs->slice->clpRng(compID));
 
-  if (compID == COMPONENT_Y && dataO.intraDataOut == 1)
+  if (compID == COMPONENT_Y 
+      && dataO.intraDataOut == 1)
   {
-    ref_debug << pu.Y().width << " " << compID << " " << m_ipaParam.refFilterFlag << "\n";
+    ref_debug << pu.Y().width << " " << compID << " " << m_ipaParam.refFilterFlag << " " << dataO.curIntraMode << "\n";
     for (int i = 0; i < srcStride; i++)
       ref_debug << srcBuf.at(i, 0) << " ";   // print refTop
     ref_debug << "\n";
@@ -326,7 +329,7 @@ void IntraPrediction::predIntraAng( const ComponentID compId, PelBuf &piPred, co
     default:          xPredIntraAng(srcBuf, piPred, channelType, clpRng); break;
   }
 
-  data_out.flush();
+  // data_out.flush();
   if (m_ipaParam.applyPDPC)
   {
     std::cout << m_ipaParam.applyPDPC << "\n";
@@ -473,7 +476,7 @@ void IntraPrediction::xPredIntraPlanar( const CPelBuf &pSrc, PelBuf &pDst )
   if (EXPORT_EN && dataO.intraDataOut)
   {
     pred = pDst.buf;
-    data_out << width << " " << 1 << "\n";
+    data_out << width << " " << 0 << "\n";
     
     // for (int k = 0; k < width + 1; k++)
     // {
@@ -507,18 +510,23 @@ void IntraPrediction::xPredIntraDc( const CPelBuf &pSrc, PelBuf &pDst, const Cha
   // export data
   const uint32_t blksize = pDst.width;
 
-#if EXPORT_EN && 0
-  Pel *pred = pDst.buf;
-  const uint32_t stride = pDst.stride;
-
-  data_out << blksize << " " << 0 << "\n";
-  if (PRINT_BLK_DATA)
-  for (int y = 0; y < blksize; y++, pred += stride)
+#if EXPORT_EN 
+  if (EXPORT_EN && dataO.intraDataOut)
   {
-    for (int x = 0; x < blksize; x++)
-      data_out << pred[x] << " ";
-    data_out << "\n";
+    Pel *pred = pDst.buf;
+    const uint32_t stride = pDst.stride;
+
+    data_out << blksize << " " << 1 << "\n";
+    if (PRINT_BLK_DATA)
+    for (int y = 0; y < blksize; y++, pred += stride)
+    {
+      for (int x = 0; x < blksize; x++)
+        data_out << pred[x] << " ";
+      data_out << "\n";
+    }
+    data_out.flush();
   }
+  
 
 #endif
 }
@@ -630,6 +638,125 @@ void IntraPrediction::initPredIntraParams(const PredictionUnit & pu, const CompA
       m_ipaParam.interpolationFlag = !isRefFilter;
     }
   }
+}
+
+void IntraPrediction::initPredIntraParams(const PredictionUnit & pu, const CompArea area, const SPS& sps, CPelBuf &srcBuf)
+{
+  const ComponentID compId = area.compID;
+  const ChannelType chType = toChannelType(compId);
+
+  const bool        useISP = NOT_INTRA_SUBPARTITIONS != pu.cu->ispMode && isLuma( chType );
+
+  const Size   cuSize    = Size( pu.cu->blocks[compId].width, pu.cu->blocks[compId].height );
+  const Size   puSize    = Size( area.width, area.height );
+  const Size&  blockSize = useISP ? cuSize : puSize;
+  const int      dirMode = PU::getFinalIntraMode(pu, chType);
+  const int     predMode = getModifiedWideAngle( blockSize.width, blockSize.height, dirMode );
+  //curPredMode              = PredMode;
+  blockData.predMode = predMode; // intra mode, from 0 to 67
+
+  m_ipaParam.isModeVer            = predMode >= DIA_IDX;
+  m_ipaParam.multiRefIndex        = isLuma (chType) ? pu.multiRefIdx : 0 ;
+  m_ipaParam.refFilterFlag        = false;
+  m_ipaParam.interpolationFlag    = false;
+  //m_ipaParam.applyPDPC            = (puSize.width >= MIN_TB_SIZEY && puSize.height >= MIN_TB_SIZEY) && m_ipaParam.multiRefIndex == 0;
+  m_ipaParam.applyPDPC = 0; //debugging
+
+  const int    intraPredAngleMode = (m_ipaParam.isModeVer) ? predMode - VER_IDX : -(predMode - HOR_IDX);
+
+  int absAng = 0;
+  if (dirMode > DC_IDX && dirMode < NUM_LUMA_MODE) // intraPredAngle for directional modes
+  {
+    static const int angTable[32]    = { 0,    1,    2,    3,    4,    6,     8,   10,   12,   14,   16,   18,   20,   23,   26,   29,   32,   35,   39,  45,  51,  57,  64,  73,  86, 102, 128, 171, 256, 341, 512, 1024 };
+    static const int invAngTable[32] = {
+      0,   16384, 8192, 5461, 4096, 2731, 2048, 1638, 1365, 1170, 1024, 910, 819, 712, 630, 565,
+      512, 468,   420,  364,  321,  287,  256,  224,  191,  161,  128,  96,  64,  48,  32,  16
+    };   // (512 * 32) / Angle
+
+    const int     absAngMode         = abs(intraPredAngleMode);
+    const int     signAng            = intraPredAngleMode < 0 ? -1 : 1;
+                  absAng             = angTable  [absAngMode];
+
+    m_ipaParam.absInvAngle           = invAngTable[absAngMode];
+    m_ipaParam.intraPredAngle        = signAng * absAng;
+    if (intraPredAngleMode < 0)
+    {
+      m_ipaParam.applyPDPC = false;
+    }
+    else if (intraPredAngleMode > 0)
+    {
+      const int sideSize = m_ipaParam.isModeVer ? puSize.height : puSize.width;
+      const int maxScale = 2;
+
+      m_ipaParam.angularScale = std::min(maxScale, floorLog2(sideSize) - (floorLog2(3 * m_ipaParam.absInvAngle - 2) - 8));
+      m_ipaParam.applyPDPC &= m_ipaParam.angularScale >= 0;
+    }
+  }
+
+  // high level conditions and DC intra prediction
+  if(   sps.getSpsRangeExtension().getIntraSmoothingDisabledFlag()
+    || !isLuma( chType )
+    || useISP
+    || PU::isMIP( pu, chType )
+    || m_ipaParam.multiRefIndex
+    || DC_IDX == dirMode
+    )
+  {
+    // if (dataO.intraDataOut && dataO.curIntraMode > 0)
+    // {
+    //   std::cout << "got here first\n";
+    //   std::cout << "--curMode: " << dataO.curIntraMode << "refFilterFlag = " << m_ipaParam.refFilterFlag << std::endl;
+    //   std::cout << "sps.getSpsRangeExtension().getIntraSmoothingDisabledFlag() : " << sps.getSpsRangeExtension().getIntraSmoothingDisabledFlag() << "\n";
+    //   std::cout << "!isLuma( chType ) : " << !isLuma( chType ) << "\n";
+    //   std::cout << "useISP : " << useISP << "\n";
+    //   std::cout << "PU::isMIP( pu, chType ) : " << PU::isMIP( pu, chType ) << "\n";
+    //   std::cout << "dirMode : " << dirMode << "\n";
+    // }
+  }
+  else if ((isLuma(chType) && pu.cu->bdpcmMode) || (!isLuma(chType) && pu.cu->bdpcmModeChroma)) // BDPCM
+  {
+    m_ipaParam.refFilterFlag = false;
+  }
+  else if (dirMode == PLANAR_IDX) // Planar intra prediction
+  {
+    m_ipaParam.refFilterFlag = puSize.width * puSize.height > 32 ? true : false;
+    // if (dataO.intraDataOut && dataO.curIntraMode > 0)
+    // {
+    //   std::cout << "got here second\n";
+    //   std::cout << "--curMode: " << dataO.curIntraMode << "refFilterFlag = " << m_ipaParam.refFilterFlag << std::endl;
+    // }
+  }
+  else if (!useISP)// HOR, VER and angular modes (MDIS)
+  {
+    bool filterFlag = false;
+    {
+      const int diff = std::min<int>( abs( predMode - HOR_IDX ), abs( predMode - VER_IDX ) );
+      const int log2Size = ((floorLog2(puSize.width) + floorLog2(puSize.height)) >> 1);
+      CHECK( log2Size >= MAX_INTRA_FILTER_DEPTHS, "Size not supported" );
+      filterFlag = (diff > m_aucIntraFilter[log2Size]);
+    }
+
+    // Selelection of either ([1 2 1] / 4 ) refrence filter OR Gaussian 4-tap interpolation filter
+    if (filterFlag)
+    {
+      const bool isRefFilter       =  isIntegerSlope(absAng);
+      CHECK( puSize.width * puSize.height <= 32, "DCT-IF interpolation filter is always used for 4x4, 4x8, and 8x4 luma CB" );
+      m_ipaParam.refFilterFlag     =  isRefFilter;
+      m_ipaParam.interpolationFlag = !isRefFilter;
+    }
+  }
+
+  // if (dataO.intraDataOut && dataO.curIntraMode > 0)
+  // {
+  //   std::cout << "curMode: " << dataO.curIntraMode << "refFilterFlag = " << m_ipaParam.refFilterFlag << std::endl;
+  //   std::cin.get();
+  // }
+  // for (int i = 0; i < area.width * 2 + 1; i++) 
+  //   ref_debug_intra << srcBuf.at(i, 0) << " ";   // print refTop
+  // ref_debug_intra << "---before\n";
+  // for (int i = 0; i < area.width * 2 + 1; i++)
+  //   ref_debug_intra << srcBuf.at(i, 1) << " ";   // print refLeft
+  // ref_debug_intra << "---\n";
 }
 
 
@@ -904,6 +1031,7 @@ void IntraPrediction::xPredIntraAng( const CPelBuf &pSrc, PelBuf &pDst, const Ch
 
         data_out << "\n";
       }
+      data_out.flush();
     }
 #endif
   }

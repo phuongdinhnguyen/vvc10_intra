@@ -571,7 +571,9 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
             //== print ref data for prediction ==//
             int      ref_length = (pu.Y().width * 2 + 1);
             CPelBuf &srcBuf =
-              CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
+              CPelBuf(getPredictorPtrUnfilt(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
+              // use filtered sample or not, decided by m_ipaParam.refFilterFlag
+            
             ref_data << pu.Y().width << "\n";
             for (int i = 0; i < ref_length; i++)
               ref_data << srcBuf.at(i, 0) << " ";   // print refTop
@@ -581,24 +583,24 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
             ref_data << "\n";
 
             //=== print original block pixels ====//
-            // Pel *          ori    = piOrg.buf;
-            // const uint32_t stride = piOrg.stride;
-            // for (int y = 0; y < height; y++, ori += stride)
-            // {
-            //   for (int x = 0; x < width; x++)
-            //   {
-            //     ref_data << ori[x] << " ";
-            //   }
-            //   ref_data << "\n";
-            // }
+            Pel *          ori    = piOrg.buf;
+            const uint32_t stride = piOrg.stride;
+            for (int y = 0; y < height; y++, ori += stride)
+            {
+              for (int x = 0; x < width; x++)
+              {
+                ref_data << ori[x] << " ";
+              }
+              ref_data << "\n";
+            }
 #endif
             // end print data //
 
-#if 0
+#if 1
             //== print ref data for prediction ==//
-            int      ref_length = (pu.Y().width * 2 + 1);
-            CPelBuf &srcBuf =
-              CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
+            // int      ref_length = (pu.Y().width * 2 + 1);
+            // CPelBuf &srcBuf =
+            //   CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
             data_out2 << pu.Y().width << "\n";
             for (int i = 0; i < ref_length; i++)
               data_out2 << srcBuf.at(i, 0) << " ";   // print refTop
@@ -606,19 +608,19 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
             for (int i = 0; i < ref_length; i++)
               data_out2 << srcBuf.at(i, 1) << " ";   // print refLeft
             data_out2 << "\n";
-
-            //=== print original block pixels ====//
-            Pel *          ori    = piOrg.buf;
-            const uint32_t stride = piOrg.stride;
-            for (int y = 0; y < height; y++, ori += stride)
-            {
-              for (int x = 0; x < width; x++)
-              {
-                data_out2 << ori[x] << " ";
-              }
-              data_out2 << "\n";
-            }
             data_out2.flush();
+            //=== print original block pixels ====//
+            // Pel *          ori    = piOrg.buf;
+            // const uint32_t stride = piOrg.stride;
+            // for (int y = 0; y < height; y++, ori += stride)
+            // {
+            //   for (int x = 0; x < width; x++)
+            //   {
+            //     data_out2 << ori[x] << " ";
+            //   }
+            //   data_out2 << "\n";
+            // }
+            // data_out2.flush();
 #endif
             std::vector <int> costMode;
             // first round
@@ -636,19 +638,27 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               bSatdChecked[uiMode] = true;
 
               pu.intraDir[0] = modeIdx;
-
-              initPredIntraParams(pu, pu.Y(), sps);
-
               int      ref_length = (pu.Y().width * 2 + 1);
-              CPelBuf &srcBuf =
-                CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
+              
+              dataO.curIntraMode = modeIdx; 
+              // CPelBuf &srcBuf = CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
+              // for (int i = 0; i < ref_length; i++)
+              //   ref_data << srcBuf.at(i, 0) << " ";   // print refTop
+              // ref_data << "---before init\n";
+              // for (int i = 0; i < ref_length; i++)
+              //   ref_data << srcBuf.at(i, 1) << " ";   // print refLeft
+              // ref_data << "---\n";
+
+              initPredIntraParams(pu, pu.Y(), sps, srcBuf);  // ref sample filtering here
+              
+              // srcBuf = CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
               // ref_data << pu.Y().width << "\n";
-              for (int i = 0; i < ref_length; i++)
-                ref_data << srcBuf.at(i, 0) << " ";   // print refTop
-              ref_data << "---after\n";
-              for (int i = 0; i < ref_length; i++)
-                ref_data << srcBuf.at(i, 1) << " ";   // print refLeft
-              ref_data << "---\n";
+              // for (int i = 0; i < ref_length; i++)
+              //   ref_data << srcBuf.at(i, 0) << " ";   // print refTop
+              // ref_data << "---after init\n";
+              // for (int i = 0; i < ref_length; i++)
+              //   ref_data << srcBuf.at(i, 1) << " ";   // print refLeft
+              // ref_data << "---\n";
 
               predIntraAng(COMPONENT_Y, piPred, pu);
 

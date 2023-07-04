@@ -83,6 +83,7 @@ public:
   std::string getVidName();
 
   bool intraDataOut = 0;
+  int curIntraMode = 0;
 };
 
 /*
