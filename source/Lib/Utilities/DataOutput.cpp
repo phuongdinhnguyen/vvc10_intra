@@ -5,35 +5,6 @@
 
 DataOutput::DataOutput() {}
 
-/*
-DataOutput::DataOutput(std::string _dir)
-{
-  // Get file name
-  dir = _dir;
-  
-  // Extract time from clock
-  time_t now = time(0);
-  tm *ltm = localtime(&now);
-
-  currentTime.year  = std::to_string(1900 + ltm->tm_year);
-  currentTime.month = std::to_string(1 + ltm->tm_mon);
-  currentTime.day   = std::to_string(ltm->tm_mday);
-  currentTime.hour  = std::to_string(ltm->tm_hour);
-  currentTime.min   = std::to_string(ltm->tm_min);
-  currentTime.sec   = std::to_string(ltm->tm_sec);
-
-  std::string outputFileName = _dir + "_" + currentTime.year + "-" + currentTime.month + "-" + currentTime.day + "_"
-                               + currentTime.hour + currentTime.min + currentTime.sec + ".txt";
-  
-  // Opening file and start writing
-  file.open(outputFileName);
-
-  // clear modeIdx aray
-  std::cout << "--2--> reset modeIdx to 0.\n";
-  //memset(modeIdx, 0, (NUM_LUMA_MODE + 10) * sizeof(uint64_t));
-}
-*/
-
 void DataOutput::init() {
   // Extract time from clock
   time_t now = time(0);
@@ -69,7 +40,7 @@ void DataOutput::init() {
 
   file.flush();   // operator "<<" only insert data to stream, not writing it, so we have to flush
 
-  runSecondRound = false;
+  runSecondRound = true;
   printCUInfo    = 0;
 }
 

@@ -54,7 +54,7 @@
 
 #define PRINT_REF_DATA 1
 #define DEBUG_INTRA_COST 1
-std::ofstream data_out2("data_all_out.txt", std::ios_base::app);
+std::ofstream data_out2("data_all_out.txt");
  //! \ingroup EncoderLib
  //! \{
 #define PLTCtx(c) SubCtx( Ctx::Palette, c )
@@ -565,12 +565,20 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
           bool bSatdChecked[NUM_INTRA_MODE];
           memset(bSatdChecked, 0, sizeof(bSatdChecked));
 
+          std::vector <int> costMode(70); // list of each modes' cost value
+
+          if (pu.Y().width == 16)
+            dataO.intraDataOut = 1;
+          else 
+            dataO.intraDataOut = 0;
+
+          bool firstModeDone = 0;
           if (!LFNSTLoadFlag)
           {
-            if (pu.Y().width == 16)
-                dataO.intraDataOut = 1;
-              else 
-                dataO.intraDataOut = 0;
+            // if (pu.Y().width == 16)
+            //   dataO.intraDataOut = 1;
+            // else 
+            //   dataO.intraDataOut = 0;
 
 #if PRINT_REF_DATA
             int      ref_length = (pu.Y().width * 2 + 1);
@@ -606,7 +614,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
 #endif
             // end print data //
 
-#if 1
+#if 0
             //== print ref data for prediction ==//
             // int      ref_length = (pu.Y().width * 2 + 1);
             // CPelBuf &srcBuf =
@@ -635,7 +643,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               data_out2.flush();
             }
 #endif
-            std::vector <int> costMode(70);
+            
             // first round
             for (int modeIdx = 0; modeIdx < numModesAvailable; modeIdx++) 
             {
@@ -649,58 +657,19 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               }
               
               bSatdChecked[uiMode] = true;
-
               pu.intraDir[0] = modeIdx;
-              int      ref_length = (pu.Y().width * 2 + 1);
-              
+
               dataO.curIntraMode = modeIdx; 
-              // CPelBuf &srcBuf = CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
-              // for (int i = 0; i < ref_length; i++)
-              //   ref_data << srcBuf.at(i, 0) << " ";   // print refTop
-              // ref_data << "---before init\n";
-              // for (int i = 0; i < ref_length; i++)
-              //   ref_data << srcBuf.at(i, 1) << " ";   // print refLeft
-              // ref_data << "---\n";
 
               initPredIntraParams(pu, pu.Y(), sps, srcBuf);  // ref sample filtering here
-              
-              // srcBuf = CPelBuf(getPredictorPtr(MAP_CHROMA(COMPONENT_Y)), ref_length, 2);   // grab refTop and refLeft
-              // ref_data << pu.Y().width << "\n";
-              // for (int i = 0; i < ref_length; i++)
-              //   ref_data << srcBuf.at(i, 0) << " ";   // print refTop
-              // ref_data << "---after init\n";
-              // for (int i = 0; i < ref_length; i++)
-              //   ref_data << srcBuf.at(i, 1) << " ";   // print refLeft
-              // ref_data << "---\n";
-
-              // if (dataO.intraDataOut)
-              // {
-              //   std::ofstream  file4("sad_debug.txt", std::ios_base::app);
-              //   Pel           *pred   = piPred.buf;
-              //   const uint32_t stride = piPred.stride;
-              //   file4 << "----" << modeIdx << " \n";
-              //   for (int y = 0; y < height; y++, pred += stride)
-              //   {
-              //     for (int x = 0; x < width; x++)
-              //       file4 << pred[x] << " ";
-              //     file4 << "\n";
-              //   }
-              //   file4.flush();
-              // }
-
               predIntraAng(COMPONENT_Y, piPred, pu);
-
-              
 
               // Use the min between SAD and HAD as the cost criterion
               // SAD is scaled by 2 to align with the scaling of HAD
               minSadHad += std::min(distParamSad.distFunc(distParamSad) * 2, distParamHad.distFunc(distParamHad));
 
-              // cost SAD calculation: in file rdCostX86.h; 
+              // cost SAD calculation can be found in file rdCostX86.h
               // function name: Distortion RdCost::xGetSAD_NxN_SIMD( const DistParam &rcDtParam )
-
-              
-
 
               // NB xFracModeBitsIntra will not affect the mode for chroma that may have already been pre-estimated.
               m_CABACEstimator->getCtx() = SubCtx( Ctx::MipFlag, ctxStartMipFlag );
@@ -715,7 +684,8 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               double cost = (double) distParamSad.distFunc(distParamSad);
               costMode[modeIdx] = (int)cost;
               DTRACE(g_trace_ctx, D_INTRA_COST, "IntraHAD: %u, %llu, %f (%d)\n", minSadHad, fracModeBits, cost, uiMode);
-              if (dataO.intraDataOut)
+              
+              if (dataO.intraDataOut)  /*  print cost of each mode */
                 file_cost << modeIdx << ":" << cost << ", ";
 
               updateCandList(ModeInfo(false, false, 0, NOT_INTRA_SUBPARTITIONS, uiMode), cost, uiRdModeList,
@@ -723,13 +693,17 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               updateCandList(ModeInfo(false, false, 0, NOT_INTRA_SUBPARTITIONS, uiMode), double(minSadHad),
                              uiHadModeList, CandHadList, numHadCand);
             }
-            if (dataO.intraDataOut)
+
+            if (dataO.intraDataOut) /* new line for cost debug */
             file_cost << "\n";
 
-            // debug best list
+            ////////////////////////////////////////////////////////////
+            // DEBUG BEST MODE LIST _ ROUND 1
+            ////////////////////////////////////////////////////////////
             #if DEBUG_INTRA_COST
             if (dataO.intraDataOut)
             {
+              file_cost << "first round: ";
               for (int modeIdx = 0; modeIdx < numModesForFullRD; modeIdx++) 
               {
                 unsigned parentMode = uiRdModeList[modeIdx].modeId;
@@ -747,7 +721,11 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               file_cost << "\n";
             }
             #endif
-            dataO.intraDataOut = 0;
+            // dataO.intraDataOut = 0;
+            firstModeDone = 1;
+            ////////////////////////////////////////////////////////////
+            // END OF DEBUG BEST MODE LIST _ ROUND 1
+            ////////////////////////////////////////////////////////////
 
             if (!sps.getUseMIP() && LFNSTSaveFlag)
             {
@@ -777,7 +755,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
           {
             static_vector<ModeInfo, FAST_UDI_MAX_RDMODE_NUM> parentCandList = uiRdModeList;
 
-            //file << "\nnumModesForFullRD: " << numModesForFullRD << "\n";
+            // if (firstModeDone) std::cout << "firstmodedone\n";
 
             // Second round of SATD for extended Angular modes
             if (dataO.runSecondRound)
@@ -785,10 +763,8 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
             {
               unsigned parentMode = parentCandList[modeIdx].modeId;
 
-              //file << parentMode << " ";
               if (parentMode > (DC_IDX + 1) && parentMode < (NUM_LUMA_MODE - 1))
               {
-                //file << "<- " << " ";   // debugging AIP2
                 for (int subModeIdx = -1; subModeIdx <= 1; subModeIdx += 2)
                 {
                   unsigned mode = parentMode + subModeIdx;
@@ -815,14 +791,17 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
 
                     uint64_t fracModeBits = xFracModeBitsIntra(pu, mode, CHANNEL_TYPE_LUMA);
 
-                    double cost = (double) minSadHad + (double) fracModeBits * sqrtLambdaForFirstPass;
-                    //double cost = (double) distParamSad.distFunc(distParamSad);
-
+                    // double cost = (double) minSadHad + (double) fracModeBits * sqrtLambdaForFirstPass;
+                    double cost = (double) distParamSad.distFunc(distParamSad);
+                    costMode[mode] = (int)cost;
 
                     updateCandList(ModeInfo(false, false, 0, NOT_INTRA_SUBPARTITIONS, mode), cost, uiRdModeList,
                                    CandCostList, numModesForFullRD);
                     updateCandList(ModeInfo(false, false, 0, NOT_INTRA_SUBPARTITIONS, mode), double(minSadHad),
                                    uiHadModeList, CandHadList, numHadCand);
+
+                    if (dataO.intraDataOut && firstModeDone)  /*  print cost of each mode */
+                      file_cost << mode << ":" << cost << ", ";
 
                     bSatdChecked[mode] = true;
                   }
@@ -831,6 +810,39 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, c
               }
 
             }
+
+            if (dataO.intraDataOut && dataO.runSecondRound && firstModeDone) /* new line for cost debug */
+            file_cost << "\n";
+
+            ////////////////////////////////////////////////////////////
+            // DEBUG BEST MODE LIST _ ROUND 2
+            ////////////////////////////////////////////////////////////
+            #if DEBUG_INTRA_COST
+            if (dataO.intraDataOut && dataO.runSecondRound && firstModeDone)
+            {
+              file_cost << "second round: ";
+              for (int modeIdx = 0; modeIdx < numModesForFullRD; modeIdx++) 
+              {
+                unsigned parentMode = uiRdModeList[modeIdx].modeId;
+                
+                file_cost << parentMode << " ";
+              }
+              file_cost << "\n";
+              file_cost << "cost: ";
+              for (int modeIdx = 0; modeIdx < numModesForFullRD; modeIdx++)
+              {
+                unsigned parentMode = uiRdModeList[modeIdx].modeId;
+
+                file_cost << costMode[parentMode] << " ";
+              }
+              file_cost << "\n-------------\n";
+            }
+            #endif
+            dataO.intraDataOut = 0;
+            ////////////////////////////////////////////////////////////
+            // END OF DEBUG BEST MODE LIST _ ROUND 2
+            ////////////////////////////////////////////////////////////
+
             if (saveDataForISP)
             {
               // we save the regular intra modes list
